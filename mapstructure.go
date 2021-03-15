@@ -247,6 +247,9 @@ type DecoderConfig struct {
 	//  }
 	Squash bool
 
+	// HookOnNil causes Decode Hooks to fire on nil values.
+	HookOnNil bool
+
 	// Metadata is the struct that will contain extra metadata about
 	// the decoding. If this is nil, then no metadata will be tracked.
 	Metadata *Metadata
@@ -280,6 +283,10 @@ type Metadata struct {
 	// weren't decoded since there was no matching field in the result interface
 	Unused []string
 }
+
+type untypedPointer interface{}
+
+var UntypedPointer *untypedPointer
 
 // Decode takes an input structure and uses reflection to translate it to
 // the output structure. output must be a pointer to a map or struct.
@@ -402,6 +409,18 @@ func (d *Decoder) decode(name string, input interface{}, outVal reflect.Value) e
 		}
 	}
 
+	// If we are running decode hooks on nil, do it now
+	if input == nil && d.config.HookOnNil == true && d.config.DecodeHook != nil {
+		// inputVal will not be set to a valid reflect value, so set it
+		// to a special untyped pointer nil value to avoid panics
+		inputVal = reflect.ValueOf(UntypedPointer)
+		var err error
+		input, err = DecodeHookExec(d.config.DecodeHook, inputVal, outVal)
+		if err != nil {
+			return fmt.Errorf("error decoding '%s': %s", name, err)
+		}
+	}
+
 	if input == nil {
 		// If the data is nil, then we don't set anything, unless ZeroFields is set
 		// to true.
@@ -425,8 +444,8 @@ func (d *Decoder) decode(name string, input interface{}, outVal reflect.Value) e
 		return nil
 	}
 
-	if d.config.DecodeHook != nil {
-		// We have a DecodeHook, so let's pre-process the input.
+	// If we don't want to hook on nils, we do it here
+	if (input != nil || d.config.HookOnNil == false) && d.config.DecodeHook != nil {
 		var err error
 		input, err = DecodeHookExec(d.config.DecodeHook, inputVal, outVal)
 		if err != nil {

@@ -1,6 +1,7 @@
 package mapstructure
 
 import (
+	"database/sql"
 	"encoding/json"
 	"io"
 	"reflect"
@@ -1019,6 +1020,106 @@ func TestDecode_FuncHook(t *testing.T) {
 
 	if result.Foo() != "baz" {
 		t.Errorf("Foo call result should be 'baz': %s", result.Foo())
+	}
+}
+
+// Decode hooks should run on nil values if we ask them to
+func TestDecode_NilValue_HookOnNil(t *testing.T) {
+	t.Parallel()
+
+	input := map[string]interface{}{
+		"NilInputField":    nil,
+		"NonNilInputField": stringPtr("Test"),
+	}
+
+	type OutStruct struct {
+		NilInputField    *sql.NullString
+		NonNilInputField *string
+	}
+
+	var out OutStruct
+
+	config := &DecoderConfig{
+		Metadata: new(Metadata),
+		Result:   &out,
+		DecodeHook: func(from, to reflect.Type, data interface{}) (interface{}, error) {
+			if from == reflect.TypeOf(UntypedPointer) && reflect.ValueOf(data).IsNil() {
+				return reflect.Zero(to).Interface(), nil
+			}
+			return data, nil
+		},
+		HookOnNil: true,
+	}
+
+	decoder, err := NewDecoder(config)
+	if err != nil {
+		t.Fatalf("should not error: %s", err)
+	}
+
+	err = decoder.Decode(input)
+	if err != nil {
+		t.Fatalf("should not error: %s", err)
+	}
+	if out.NilInputField == nil {
+		t.Fatalf("field should not be nil")
+	}
+	zeroVal := reflect.Zero(reflect.TypeOf(*out.NilInputField)).Interface()
+	if !reflect.DeepEqual(*out.NilInputField, zeroVal) {
+		t.Fatalf("field should have zero value %v, got %v", zeroVal, *out.NilInputField)
+	}
+	if out.NonNilInputField == nil {
+		t.Fatalf("NonNilInputField field should be nil")
+	}
+	if *out.NonNilInputField != "Test" {
+		t.Fatalf("NonNilInputField field should have value 'Test'")
+	}
+}
+
+// Decode hooks should not run on nil values by default
+func TestDecode_NilValue_NoHookOnNil(t *testing.T) {
+	t.Parallel()
+
+	input := map[string]interface{}{
+		"NilInputField":    nil,
+		"NonNilInputField": stringPtr("Test"),
+	}
+
+	type OutStruct struct {
+		NilInputField    *sql.NullString
+		NonNilInputField *string
+	}
+
+	var out OutStruct
+
+	config := &DecoderConfig{
+		Metadata: new(Metadata),
+		Result:   &out,
+		DecodeHook: func(from, to reflect.Type, data interface{}) (interface{}, error) {
+			if from == reflect.TypeOf(UntypedPointer) && reflect.ValueOf(data).IsNil() {
+				return reflect.Zero(to).Interface(), nil
+			}
+			return data, nil
+		},
+		HookOnNil: false,
+	}
+
+	decoder, err := NewDecoder(config)
+	if err != nil {
+		t.Fatalf("should not error: %s", err)
+	}
+
+	err = decoder.Decode(input)
+	if err != nil {
+		t.Fatalf("should not error: %s", err)
+	}
+	if out.NilInputField != nil {
+		t.Fatalf("NilInputField field should be nil")
+	}
+	if out.NonNilInputField == nil {
+		t.Fatalf("NonNilInputField field should be nil")
+	}
+	if *out.NonNilInputField != "Test" {
+		t.Fatalf("NonNilInputField field should have value 'Test'")
 	}
 }
 
