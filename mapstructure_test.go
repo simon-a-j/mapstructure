@@ -1075,6 +1075,51 @@ func TestDecode_NilValue_HookOnNil(t *testing.T) {
 	}
 }
 
+// We should be able to hook on nil but pass through doing nothing without a panic
+func TestDecode_NilValue_HookOnNilPassthrough(t *testing.T) {
+	t.Parallel()
+
+	input := map[string]interface{}{
+		"NilInputField":    nil,
+		"NonNilInputField": stringPtr("Test"),
+	}
+
+	type OutStruct struct {
+		NilInputField    *sql.NullString
+		NonNilInputField *string
+	}
+
+	var out OutStruct
+
+	config := &DecoderConfig{
+		Metadata: new(Metadata),
+		Result:   &out,
+		DecodeHook: func(from, to reflect.Type, data interface{}) (interface{}, error) {
+			return data, nil
+		},
+		HookOnNil: true,
+	}
+
+	decoder, err := NewDecoder(config)
+	if err != nil {
+		t.Fatalf("should not error: %s", err)
+	}
+
+	err = decoder.Decode(input)
+	if err != nil {
+		t.Fatalf("should not error: %s", err)
+	}
+	if out.NilInputField != nil {
+		t.Fatalf("field should be nil")
+	}
+	if out.NonNilInputField == nil {
+		t.Fatalf("NonNilInputField field should be nil")
+	}
+	if *out.NonNilInputField != "Test" {
+		t.Fatalf("NonNilInputField field should have value 'Test'")
+	}
+}
+
 // Decode hooks should not run on nil values by default
 func TestDecode_NilValue_NoHookOnNil(t *testing.T) {
 	t.Parallel()

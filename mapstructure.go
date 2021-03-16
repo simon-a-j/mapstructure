@@ -419,6 +419,11 @@ func (d *Decoder) decode(name string, input interface{}, outVal reflect.Value) e
 		if err != nil {
 			return fmt.Errorf("error decoding '%s': %s", name, err)
 		}
+		// If after the hook the input did not change, reset it to
+		// nil
+		if (reflect.TypeOf(input)) == (reflect.TypeOf(UntypedPointer)) {
+			input = nil
+		}
 	}
 
 	if input == nil {
